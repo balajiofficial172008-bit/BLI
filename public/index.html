@@ -1050,6 +1050,11 @@ html, body {
 
     <!-- Chat Input: STRICTLY TEXT ONLY (No photo/video/attachment buttons) -->
     <div id="chat-input-area">
+      <!-- Inline Accept/Decline bar shown when user receives a pending request -->
+      <div id="inline-request-bar" style="display:none;padding:10px 0 6px;gap:10px;">
+        <button class="btn-accept" id="inline-accept-btn" style="flex:1;padding:11px;font-size:13px;">✓ Accept Request</button>
+        <button class="btn-decline" id="inline-decline-btn" style="flex:1;padding:11px;font-size:13px;">✕ Decline</button>
+      </div>
       <div class="input-bar">
         <textarea id="msg-input" placeholder="Type text message..." rows="1"
           oninput="handleMsgInput(this)" onkeydown="handleMsgKey(event)"></textarea>
@@ -1708,9 +1713,18 @@ async function acceptRequest(convId, e) {
       accepted: true,
       requestFrom: null
     });
-    toast('Request accepted. You can now chat.', 'success');
+    // Hide inline bar and enable input immediately
+    hideInlineRequestActions();
+    const input = document.getElementById('msg-input');
+    const sendBtn = document.getElementById('send-btn');
+    if (input) { input.disabled = false; input.placeholder = 'Type text message...'; input.focus(); }
+    if (sendBtn) sendBtn.disabled = false;
+    toast('Request accepted. You can now chat!', 'success');
   } catch (err) {
-    toast(err.message, 'error');
+    toast('Failed to accept: ' + err.message, 'error');
+    // Re-enable buttons on failure
+    const acceptBtn = document.getElementById('inline-accept-btn');
+    if (acceptBtn) { acceptBtn.disabled = false; acceptBtn.textContent = '✓ Accept Request'; }
   }
 }
 
@@ -1718,9 +1732,12 @@ async function declineRequest(convId, e) {
   e?.stopPropagation();
   try {
     await db.collection('conversations').doc(convId).delete();
+    hideInlineRequestActions();
     toast('Request declined', '');
   } catch (err) {
-    toast(err.message, 'error');
+    toast('Failed to decline: ' + err.message, 'error');
+    const declineBtn = document.getElementById('inline-decline-btn');
+    if (declineBtn) { declineBtn.disabled = false; declineBtn.textContent = '✕ Decline'; }
   }
 }
 
@@ -1979,16 +1996,48 @@ function showChatInput(conv) {
   const input = document.getElementById('msg-input');
   const sendBtn = document.getElementById('send-btn');
 
-  // Disable input only if this user is the RECEIVER of a pending request (not yet accepted)
+  // If this user is the RECEIVER of a pending request — show Accept/Decline buttons inline
   if (!conv.accepted && conv.requestFrom !== currentUser.uid) {
     input.disabled = true;
     sendBtn.disabled = true;
-    input.placeholder = 'Accept the message request to reply…';
+    input.placeholder = 'Accept the request to reply…';
+    showInlineRequestActions(conv.id);
   } else {
     input.disabled = false;
-    // send btn is re-enabled when user types (handled by handleMsgInput)
     input.placeholder = 'Type text message...';
+    hideInlineRequestActions();
   }
+}
+
+function showInlineRequestActions(convId) {
+  const bar = document.getElementById('inline-request-bar');
+  if (!bar) return;
+  bar.style.display = 'flex';
+  const acceptBtn = document.getElementById('inline-accept-btn');
+  const declineBtn = document.getElementById('inline-decline-btn');
+  // Rebind onclick each time so convId is fresh
+  acceptBtn.onclick = async () => {
+    acceptBtn.disabled = true;
+    acceptBtn.textContent = 'Accepting…';
+    await acceptRequest(convId);
+  };
+  declineBtn.onclick = async () => {
+    declineBtn.disabled = true;
+    declineBtn.textContent = 'Declining…';
+    await declineRequest(convId);
+    // Close chat view after declining
+    document.getElementById('chat-header').classList.remove('visible');
+    document.getElementById('messages-area').classList.remove('visible');
+    document.getElementById('chat-input-area').classList.remove('visible');
+    document.getElementById('welcome-view').style.display = '';
+    state.activeConvId = null;
+    state.activeConv = null;
+  };
+}
+
+function hideInlineRequestActions() {
+  const bar = document.getElementById('inline-request-bar');
+  if (bar) bar.style.display = 'none';
 }
 
 function showRequestCenter() {
