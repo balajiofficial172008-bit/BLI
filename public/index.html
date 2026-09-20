@@ -1891,7 +1891,8 @@ function renderSidebar() {
 
 function renderChatList() {
   const container = document.getElementById('chat-list');
-  const acceptedConvs = state.conversations.filter(c => c.accepted);
+  // Show accepted convs AND pending convs that the current user initiated (requestFrom === me)
+  const acceptedConvs = state.conversations.filter(c => c.accepted || c.requestFrom === currentUser.uid);
 
   if (!acceptedConvs.length) {
     container.innerHTML = `<div class="empty-state">
@@ -1904,7 +1905,9 @@ function renderChatList() {
   container.innerHTML = acceptedConvs.map(c => {
     const isOnline = state.onlineUsers.get(c.other.id) === true;
     const isActive = c.id === state.activeConvId;
-    const preview = c.lastMessage?.text ? escHtml(c.lastMessage.text.slice(0, 36)) : 'No messages yet';
+    const preview = c.lastMessage?.text
+      ? escHtml(c.lastMessage.text.slice(0, 36))
+      : (!c.accepted ? '⏳ Pending request…' : 'No messages yet');
 
     return `<div class="chat-item ${isActive ? 'active' : ''}" onclick="openConversation('${c.id}')">
       <div class="avatar">
@@ -1913,10 +1916,11 @@ function renderChatList() {
       </div>
       <div class="chat-meta">
         <div class="chat-name">${escHtml(c.other.username)}</div>
-        <div class="chat-preview">${preview}</div>
+        <div class="chat-preview ${!c.accepted ? '' : ''}">${preview}</div>
       </div>
       <div class="chat-aside">
         <div class="chat-time">${c.lastMessage ? formatRelative(c.lastMessage.timestamp) : ''}</div>
+        ${!c.accepted ? '<div style="font-size:9px;color:var(--gold-dim);letter-spacing:0.06em;text-transform:uppercase;">Pending</div>' : ''}
       </div>
     </div>`;
   }).join('');
@@ -1973,12 +1977,16 @@ function showChatInput(conv) {
   const area = document.getElementById('chat-input-area');
   area.classList.add('visible');
   const input = document.getElementById('msg-input');
+  const sendBtn = document.getElementById('send-btn');
 
+  // Disable input only if this user is the RECEIVER of a pending request (not yet accepted)
   if (!conv.accepted && conv.requestFrom !== currentUser.uid) {
     input.disabled = true;
+    sendBtn.disabled = true;
     input.placeholder = 'Accept the message request to reply…';
   } else {
     input.disabled = false;
+    // send btn is re-enabled when user types (handled by handleMsgInput)
     input.placeholder = 'Type text message...';
   }
 }

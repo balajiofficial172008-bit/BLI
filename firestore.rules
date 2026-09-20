@@ -11,11 +11,12 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == uid;
     }
 
+    // FIX: Use .hasAny() for array membership — 'in' operator does NOT work for arrays in Firestore Rules
     function isConversationParticipant(convData) {
       return isAuthenticated()
         && convData != null
         && ('participants' in convData)
-        && (request.auth.uid in convData.participants);
+        && convData.participants.hasAny([request.auth.uid]);
     }
 
     // ─────────────────────────────────────────────────────────────
