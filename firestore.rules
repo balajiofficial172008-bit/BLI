@@ -1,0 +1,112 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isUser(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function isConversationParticipant(convData) {
+      return isAuthenticated()
+        && convData != null
+        && ('participants' in convData)
+        && (request.auth.uid in convData.participants);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Users Profile Collection
+    // ─────────────────────────────────────────────────────────────
+    match /users/{userId} {
+      // Allow reading profiles for user search and contact names
+      allow read: if isAuthenticated();
+
+      // Only the user can create their own profile document
+      allow create: if isUser(userId)
+        && request.resource.data.uid == userId
+        && request.resource.data.keys().hasAll(['uid', 'username', 'email'])
+        && request.resource.data.keys().hasOnly(['uid', 'username', 'email', 'createdAt', 'online', 'lastSeen', 'typingTo'])
+        && request.resource.data.username is string
+        && request.resource.data.username.size() >= 3
+        && request.resource.data.username.size() <= 30
+        && request.resource.data.email is string;
+
+      // Only user can update their status, username, or presence
+      allow update: if isUser(userId)
+        && request.resource.data.uid == userId
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['uid', 'createdAt']));
+
+      allow delete: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Unique Username Index (for quick duplicate checks)
+    // ─────────────────────────────────────────────────────────────
+    match /usernames/{username} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'createdAt']);
+      allow delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Conversations Collection
+    // ─────────────────────────────────────────────────────────────
+    match /conversations/{convId} {
+      // Only conversation participants can view the conversation metadata
+      allow read: if isAuthenticated() && (resource == null || isConversationParticipant(resource.data));
+
+      // Create a conversation: must be one of the participants
+      allow create: if isAuthenticated()
+        && (request.auth.uid in request.resource.data.participants)
+        && request.resource.data.participants is list
+        && request.resource.data.participants.size() == 2
+        && request.resource.data.keys().hasOnly(['id', 'participants', 'participantUsernames', 'accepted', 'requestFrom', 'createdAt', 'lastMessage'])
+        && request.resource.data.accepted is bool;
+
+      // Update conversation: accept/decline request or update last message
+      allow update: if isAuthenticated()
+        && isConversationParticipant(resource.data)
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['participants', 'createdAt', 'id']));
+
+      // Delete conversation (e.g. declining request)
+      allow delete: if isAuthenticated() && isConversationParticipant(resource.data);
+
+      // ───────────────────────────────────────────────────────────
+      // Messages Subcollection: STRICTLY TEXT ONLY
+      // ───────────────────────────────────────────────────────────
+      match /messages/{messageId} {
+        // Only conversation participants can read messages
+        allow read: if isAuthenticated()
+          && isConversationParticipant(get(/databases/$(database)/documents/conversations/$(convId)).data);
+
+        // Create message:
+        // - Must be conversation participant
+        // - Sender must be current user
+        // - Text only: strictly validated string, no media / files / attachments permitted
+        allow create: if isAuthenticated()
+          && isConversationParticipant(get(/databases/$(database)/documents/conversations/$(convId)).data)
+          && request.resource.data.from == request.auth.uid
+          && request.resource.data.keys().hasOnly(['id', 'from', 'text', 'timestamp', 'readBy', 'readAt'])
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 2000
+          && request.resource.data.readBy is list;
+
+        // Update message: only for read receipts (readBy, readAt)
+        // Message text, from, and timestamp cannot be altered
+        allow update: if isAuthenticated()
+          && isConversationParticipant(get(/databases/$(database)/documents/conversations/$(convId)).data)
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['text', 'from', 'timestamp', 'id']));
+
+        // WhatsApp-style permanent message history: messages can NEVER be deleted
+        allow delete: if false;
+      }
+    }
+  }
+}

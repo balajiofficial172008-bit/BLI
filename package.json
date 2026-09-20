@@ -1,0 +1,16 @@
+{
+  "name": "cipher-messaging",
+  "version": "1.0.0",
+  "description": "CIPHER — Luxury ephemeral text messaging",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "express": "^4.18.2",
+    "uuid": "^9.0.0",
+    "ws": "^8.14.2"
+  }
+}

@@ -1,0 +1,16 @@
+﻿{
+  "name": "CIPHER - Private Messaging",
+  "short_name": "CIPHER",
+  "description": "Private luxury text messaging",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#080A0D",
+  "theme_color": "#080A0D",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "categories": ["social", "utilities"],
+  "lang": "en"
+}
